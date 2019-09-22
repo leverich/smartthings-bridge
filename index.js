@@ -5,7 +5,7 @@ exports.handler = async (event) => {
     try {
         return await handler(event);
     } catch (err) {
-        console.log(`error handling request; err=${JSON.stringify(err)}`);
+        console.log('error handling request:', err);
     }
 };
 
@@ -76,15 +76,16 @@ async function handler(event) {
             }
             break;
 
-        case 'INSTALL':
+        case 'INSTALL': {
             resp = {"installData": {}};
-            const installToken = event.installData.authToken;
-            await pollInfoAll(installToken);
-            const appId = event.installData.installedApp.installedAppId;
-            const devices = await getAllDevices(installToken);
-            const deviceIds = devices.map(d => { return d.deviceId });
-            await subscribeWithDeviceIds(deviceIds, installToken, appId);
-            await callJsonApi(`https://api.smartthings.com/v1/installedapps/${appId}/schedules`, installToken, {
+
+            const data = event.installData;
+            await pollAllInfo(data);
+            await updateSubscriptions(data);
+
+            const token = data.authToken;
+            const appId = data.installedApp.installedAppId;
+            await callJsonApi(`https://api.smartthings.com/v1/installedapps/${appId}/schedules`, token, {
                 "name": "background_refresh",
                 "cron": {
                     "expression": "*/15 * * * ? *",
@@ -92,22 +93,17 @@ async function handler(event) {
                 }
             });
             break;
+        }
 
-        case 'EVENT':
-            const eventToken = event.eventData.authToken;
-            const submitUrl = event.eventData.installedApp.config.url[0].stringConfig.value;
-            const submitToken = event.eventData.installedApp.config.token[0].stringConfig.value;
-            resp = {"eventData": {}};
-            for (let i in event.eventData.events) {
-                const e = event.eventData.events[i];
-                await handleEvent(e, eventToken, submitUrl, submitToken);
-            }
-            break;
-
-        // FIXME: Does this need to be implemented? Update subscriptions??
-        case 'UPDATE':
+        case 'UPDATE': {
             resp = {"updateData": {}};
+
+            const data = event.updateData;
+            await pollAllInfo(data);
+            await updateSubscriptions(data);
+
             break;
+        }
 
         case 'UNINSTALL':
             resp = {"uninstallData": {}};
@@ -115,6 +111,11 @@ async function handler(event) {
 
         case 'OAUTH_CALLBACK':
             resp = {"oAuthCallbackData": {}};
+            break;
+
+        case 'EVENT':
+            resp = {"eventData": {}};
+            await handleEvent(event.eventData);
             break;
 
         default:
@@ -130,23 +131,34 @@ async function handler(event) {
     return resp;
 }
 
-async function handleEvent(event, eventToken, submitUrl, submitToken) {
-    console.log(`handling event; event=${JSON.stringify(event)}`);
-    await submitToEndpoint(submitUrl, submitToken, event);
-    
-    if (event.eventType === 'TIMER_EVENT') {
-        await pollInfoAll(eventToken, submitUrl, submitToken);
+async function handleEvent(data) {
+    const submitUrl = data.installedApp.config.url[0].stringConfig.value;
+    const submitToken = data.installedApp.config.token[0].stringConfig.value;
+
+    for (let i in data.events) {
+        const e = data.events[i];
+        console.log(`handling event; event=${JSON.stringify(e)}`);
+        await submitToEndpoint(submitUrl, submitToken, e);
+
+        if (e.eventType === 'TIMER_EVENT') {
+            await pollAllInfo(data);
+            await updateSubscriptions(data);
+        }
     }
 }
 
 // Scrape all devices, locations, and rooms and POST to HTTP Endpoint.
-async function pollInfoAll(eventToken, submitUrl, submitToken) {
-    const devices = await getAllDevices(eventToken);
-    const locations = await getAllLocations(eventToken);
+async function pollAllInfo(data) {
+    const token = data.authToken;
+    const submitUrl = data.installedApp.config.url[0].stringConfig.value;
+    const submitToken = data.installedApp.config.token[0].stringConfig.value;
+
+    const devices = await getAllDevices(token);
+    const locations = await getAllLocations(token);
     const locationIds = locations.map(i => { return i.locationId });
     const rooms = [];
     for (let i in locationIds) {
-        rooms.push(...await getAllRoomsWithLocationId(eventToken, locationIds[i]));
+        rooms.push(...await getAllRoomsWithLocationId(token, locationIds[i]));
     }
 
     const promises = [];
@@ -201,6 +213,24 @@ async function getAllLocations(token) {
 
 async function getAllRoomsWithLocationId(token, locationId) {
     return getItems(`https://api.smartthings.com/v1/locations/${locationId}/rooms`, token);
+}
+
+async function updateSubscriptions(data) {
+    const token = data.authToken;
+    const installedAppId = data.installedApp.installedAppId;
+
+    const devices = await getAllDevices(token);
+    const deviceIds = new Set(devices.map(d => { return d.deviceId }));
+    const subscriptions = await getItems(`https://api.smartthings.com/v1/installedapps/${installedAppId}/subscriptions`, token);
+    const subscriptionDeviceIds = new Set(subscriptions.map(s => { return s.device.deviceId }));
+
+    const missingDeviceIds = [...new Set([...deviceIds].filter(x => !subscriptionDeviceIds.has(x)))];
+
+    if (missingDeviceIds.length > 0) {
+        console.log(`adding new subscriptions; devices=${JSON.stringify(missingDeviceIds)}`);
+
+        await subscribeWithDeviceIds(missingDeviceIds, token, installedAppId);
+    }
 }
 
 async function subscribeWithDeviceIds(deviceIds, token, installedAppId) {
