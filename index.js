@@ -154,11 +154,16 @@ async function pollAllInfo(data) {
     const submitToken = data.installedApp.config.token[0].stringConfig.value;
 
     const devices = await getAllDevices(token);
+    const deviceIds = devices.map(i => { return i.deviceId });
     const locations = await getAllLocations(token);
     const locationIds = locations.map(i => { return i.locationId });
     const rooms = [];
     for (let i in locationIds) {
         rooms.push(...await getAllRoomsWithLocationId(token, locationIds[i]));
+    }
+    const deviceStatuses = [];
+    for (let i in deviceIds) {
+        deviceStatuses.push(await getDeviceStatusWithDeviceId(token, deviceIds[i]));
     }
 
     const promises = [];
@@ -184,6 +189,14 @@ async function pollAllInfo(data) {
             "eventType": "ROOM_INFO",
             "eventTime": (new Date()).toISOString(),
             "roomInfo": rooms[i]
+        }));
+    }
+
+    for (let i in deviceStatuses) {
+        promises.push(submitToEndpoint(submitUrl, submitToken, {
+            "eventType": "DEVICE_STATUS",
+            "eventTime": (new Date()).toISOString(),
+            "deviceStatus": deviceStatuses[i]
         }));
     }
 
@@ -213,6 +226,12 @@ async function getAllLocations(token) {
 
 async function getAllRoomsWithLocationId(token, locationId) {
     return getItems(`https://api.smartthings.com/v1/locations/${locationId}/rooms`, token);
+}
+
+async function getDeviceStatusWithDeviceId(token, deviceId) {
+    const ret = await callJsonApi(`https://api.smartthings.com/v1/devices/${deviceId}/status`, token);
+    ret.deviceId = deviceId;
+    return ret;
 }
 
 async function updateSubscriptions(data) {
