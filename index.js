@@ -200,9 +200,7 @@ async function pollAllInfo(data) {
         }));
     }
 
-    for (let i in promises) {
-        await promises[i];
-    }
+    await Promise.all(promises);
 }
 
 async function getItems(url, token) {
@@ -221,7 +219,15 @@ async function getAllDevices(token) {
 }
 
 async function getAllLocations(token) {
-    return getItems('https://api.smartthings.com/v1/locations', token);
+    const locations = await getItems('https://api.smartthings.com/v1/locations', token);
+    const locationIds = locations.map(i => { return i.locationId });
+
+    const locationInfos = [];
+    for (let i in locationIds) {
+        locationInfos.push(await callJsonApi(`https://api.smartthings.com/v1/locations/${locationIds[i]}`, token));
+    }
+
+    return locationInfos;
 }
 
 async function getAllRoomsWithLocationId(token, locationId) {
