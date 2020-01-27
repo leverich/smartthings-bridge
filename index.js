@@ -300,6 +300,8 @@ async function callJsonApi(url, token, payload) {
                 console.log(`received api response; payload=${JSON.stringify(body)}`);
                 if (body.length > 0) {
                     resolve(JSON.parse(body));
+                } else {
+                    resolve(JSON.parse("{}"));
                 }
             });
         });
