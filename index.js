@@ -163,7 +163,10 @@ async function pollAllInfo(data) {
     }
     const deviceStatuses = [];
     for (let i in deviceIds) {
-        deviceStatuses.push(await getDeviceStatusWithDeviceId(token, deviceIds[i]));
+        const res = await getDeviceStatusWithDeviceId(token, deviceIds[i]);
+        if (res !== null) {
+            deviceStatuses.push(await getDeviceStatusWithDeviceId(token, deviceIds[i]));
+        }
     }
 
     const promises = [];
@@ -208,8 +211,12 @@ async function getItems(url, token) {
     let nextUrl = url;
     do {
         const res = await callJsonApi(nextUrl, token);
-        items.push(...res.items);
-        nextUrl = res._links ? res._links.next : null;
+        if (res === null) {
+            nextUrl = null;
+        } else {
+            items.push(...res.items);
+            nextUrl = res._links ? res._links.next : null;
+        }
     } while(nextUrl);
     return items;
 }
@@ -224,7 +231,10 @@ async function getAllLocations(token) {
 
     const locationInfos = [];
     for (let i in locationIds) {
-        locationInfos.push(await callJsonApi(`https://api.smartthings.com/v1/locations/${locationIds[i]}`, token));
+        const res = await callJsonApi(`https://api.smartthings.com/v1/locations/${locationIds[i]}`, token);
+        if (res !== null) {
+            locationInfos.push(res);
+        }
     }
 
     return locationInfos;
@@ -236,8 +246,12 @@ async function getAllRoomsWithLocationId(token, locationId) {
 
 async function getDeviceStatusWithDeviceId(token, deviceId) {
     const ret = await callJsonApi(`https://api.smartthings.com/v1/devices/${deviceId}/status`, token);
-    ret.deviceId = deviceId;
-    return ret;
+    if (ret === null) {
+        return null;
+    } else {
+        ret.deviceId = deviceId;
+        return ret;
+    }
 }
 
 async function updateSubscriptions(data) {
@@ -294,6 +308,12 @@ async function callJsonApi(url, token, payload) {
     return new Promise((resolve, reject) => {
         let body = [];
         const req = https.request(url, options, res => {
+            if (res.statusCode != 200) {
+                console.log(`received non-200 api response; statusCode=${res.statusCode} payload=${JSON.stringify(body)}`);
+                resolve(null);
+                return;
+            }
+            
             res.on("data", data => { body.push(data) });
             res.on("end", () => {
                 body = body.join();
