@@ -318,7 +318,11 @@ async function callJsonApi(url, token, payload) {
             res.on("end", () => {
                 body = body.join();
                 console.log(`received api response; payload=${JSON.stringify(body)}`);
-                resolve(JSON.parse(body));
+                if (body.length > 0) {
+                    resolve(JSON.parse(body));
+                } else {
+                    resolve(JSON.parse("{}"));
+                }
             });
         });
         req.on("error", res => {
