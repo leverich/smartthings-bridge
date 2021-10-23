@@ -1,6 +1,5 @@
 Samsung SmartThings to HTTP+JSON Bridge
 ---------------------------------------
-
 This Lambda function is a simple Samsung SmartThings "Automation"
 SmartApp that submits SmartApp "Events" to a user-specified HTTP
 Endpoint. It also periodically polls the inventory of Devices and
@@ -12,15 +11,19 @@ of when a door is opened or closed, etc.).
 
 Setup
 -----
-
 (AWS)
-1. Create a Lambda function with the Node 10.x runtime.
+Option 1: Manual
+1. Create a Lambda function with the Node 12.x runtime.
 2. Replace the entry-point with the contents of index.js.
 3. Grant Samsung permission to execute your new Lambda function:
     aws lambda add-permission --statement-id smartthings \
         --principal 906037444270 \
         --action lambda:InvokeFunction \
         --function-name NAME_OF_YOUR_LAMBDA_FUNCTION
+
+Option 2: Terraform
+1. Configure a terraform backend (see main.tf.example for an example).
+2. Run `terraform apply`.
 
 (SmartThings Developer Workspace)
 4. Create a new "Automation" project in the SmartThings Developer Workspace:
@@ -38,7 +41,6 @@ Setup
 
 Operation
 ---------
-
 When the Automation installs, it will subscribe to events for every
 Device in your Location. Subsequently, any activity on these Devices
 will cause a "DEVICE_EVENT" event to be submitted to the URL you
@@ -55,7 +57,6 @@ events.
 
 Limitations
 -----------
-
 The SmartApps API limits Automations to a maximum of 20
 subscriptions. That means this Automation may not work if you have
 more than 20 Devices paired with SmartThings.

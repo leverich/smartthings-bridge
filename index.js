@@ -27,8 +27,8 @@ async function handler(event) {
                         "configurationData": {
                             "initialize": {
                                 "id": "app",
-                                "name": "SmartThings/HTTP+JSON Bridge",
-                                "description": "SmartThings/HTTP+JSON Bridge",
+                                "name": "Log to Webhook",
+                                "description": "Log SmartThings events to an HTTP webhook URL",
                                 "permissions": [
                                     "r:devices:*",
                                     "r:locations:*"
@@ -58,7 +58,7 @@ async function handler(event) {
                                         },
                                         {
                                             "id": "token",
-                                            "name": "Enter the BEARER token to use",
+                                            "name": "Enter the Authorization header to use",
                                             "description": "Tap to set",
                                             "type": "TEXT",
                                             "required": true,
@@ -83,7 +83,7 @@ async function handler(event) {
             await pollAllInfo(data);
             await updateSubscriptions(data);
 
-            const token = data.authToken;
+            const token = `Bearer ${data.authToken}`;
             const appId = data.installedApp.installedAppId;
             await callJsonApi(`https://api.smartthings.com/v1/installedapps/${appId}/schedules`, token, {
                 "name": "background_refresh",
@@ -149,7 +149,7 @@ async function handleEvent(data) {
 
 // Scrape all devices, locations, and rooms and POST to HTTP Endpoint.
 async function pollAllInfo(data) {
-    const token = data.authToken;
+    const token = `Bearer ${data.authToken}`;
     const submitUrl = data.installedApp.config.url[0].stringConfig.value;
     const submitToken = data.installedApp.config.token[0].stringConfig.value;
 
@@ -255,7 +255,7 @@ async function getDeviceStatusWithDeviceId(token, deviceId) {
 }
 
 async function updateSubscriptions(data) {
-    const token = data.authToken;
+    const token = `Bearer ${data.authToken}`;
     const installedAppId = data.installedApp.installedAppId;
 
     const devices = await getAllDevices(token);
@@ -297,7 +297,7 @@ async function submitToEndpoint(url, token, payload) {
 async function callJsonApi(url, token, payload) {
     const options = {
         headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `${token}`,
             'Content-Type': 'application/json'
         },
         method: payload ? 'POST' : 'GET'
@@ -313,11 +313,12 @@ async function callJsonApi(url, token, payload) {
                 resolve(null);
                 return;
             }
-            
+
             res.on("data", data => { body.push(data) });
             res.on("end", () => {
                 body = body.join();
                 console.log(`received api response; payload=${JSON.stringify(body)}`);
+                body.replace(/,,/g,','); // Samsung! (╯°□°)╯︵ ┻━┻
                 resolve(JSON.parse(body));
             });
         });
