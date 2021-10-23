@@ -138,6 +138,9 @@ async function handleEvent(data) {
     for (let i in data.events) {
         const e = data.events[i];
         console.log(`handling event; event=${JSON.stringify(e)}`);
+        if (e.eventTime === '1970-01-01T00:00:00Z') { // Samsung! (╯°□°)╯︵ ┻━┻
+            e.eventTime = (new Date()).toISOString();
+        }
         await submitToEndpoint(submitUrl, submitToken, e);
 
         if (e.eventType === 'TIMER_EVENT') {
