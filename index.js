@@ -80,9 +80,6 @@ async function handler(event) {
             resp = {"installData": {}};
 
             const data = event.installData;
-            await pollAllInfo(data);
-            await updateSubscriptions(data);
-
             const token = `Bearer ${data.authToken}`;
             const appId = data.installedApp.installedAppId;
             await callJsonApi(`https://api.smartthings.com/v1/installedapps/${appId}/schedules`, token, {
@@ -92,6 +89,10 @@ async function handler(event) {
                     "timezone": "GMT"
                 }
             });
+
+            await pollAllInfo(data);
+            await updateSubscriptions(data);
+
             break;
         }
 
@@ -99,6 +100,16 @@ async function handler(event) {
             resp = {"updateData": {}};
 
             const data = event.updateData;
+            const token = `Bearer ${data.authToken}`;
+            const appId = data.installedApp.installedAppId;
+            await callJsonApi(`https://api.smartthings.com/v1/installedapps/${appId}/schedules`, token, {
+                "name": "background_refresh",
+                "cron": {
+                    "expression": "*/15 * * * ? *",
+                    "timezone": "GMT"
+                }
+            });
+
             await pollAllInfo(data);
             await updateSubscriptions(data);
 
@@ -164,13 +175,11 @@ async function pollAllInfo(data) {
     for (let i in locationIds) {
         rooms.push(...await getAllRoomsWithLocationId(token, locationIds[i]));
     }
-    const deviceStatuses = [];
-    for (let i in deviceIds) {
-        const res = await getDeviceStatusWithDeviceId(token, deviceIds[i]);
-        if (res !== null) {
-            deviceStatuses.push(await getDeviceStatusWithDeviceId(token, deviceIds[i]));
-        }
-    }
+
+    const deviceStatuses = (
+        await Promise.all(deviceIds.map(i => { return getDeviceStatusWithDeviceId(token, i) }))
+    ).filter(x => { return x !== null });
+    console.log(deviceStatuses);
 
     const promises = [];
 
@@ -321,7 +330,8 @@ async function callJsonApi(url, token, payload) {
             res.on("end", () => {
                 body = body.join();
                 console.log(`received api response; payload=${JSON.stringify(body)}`);
-                body.replace(/,,/g,','); // Samsung! (╯°□°)╯︵ ┻━┻
+                body = body.replace(/,,/g,','); // Samsung! (╯°□°)╯︵ ┻━┻   ... ,{"id":"configuration",,"version":1}, ...
+                body = body.replace(/:,/g,':'); // Samsung! (╯°□°)╯︵ ┻━┻   ... "ovenMode":{"value":,"Others","timestamp":"2021-10-18T03:19:35.762Z"} ...
                 resolve(JSON.parse(body));
             });
         });
